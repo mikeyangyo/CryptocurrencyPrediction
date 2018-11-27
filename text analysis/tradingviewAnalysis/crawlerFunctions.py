@@ -153,7 +153,9 @@ def getPostInfo(startURL, Date = None):
             return None, continueFinding
 
     # scroll the page to buttom
-    browser = webdriver.Chrome('./chromedriver')
+    chrome_options = webdriver.ChromeOptions()  
+    chrome_options.add_argument("--headless")  
+    browser = webdriver.Chrome('./chromedriver', chrome_options=chrome_options)
     browser.get(startURL)
     time.sleep(1)
     elem = browser.find_element_by_tag_name('body')
@@ -170,7 +172,7 @@ def getPostInfo(startURL, Date = None):
     soup = BeautifulSoup(browser.page_source, 'html.parser')
 
     # check author existence
-    sql = 'select id from {schema}.{table} where user_name = "{user_name}"'.format(schema=SCHEMA, table=table_name_set['comment'], user_name=author)
+    sql = 'select id from {schema}.{table} where user_name = "{user_name}"'.format(schema=SCHEMA, table=table_name_set['user'], user_name=author)
     result, msgs, _ = execute_sql(db_info_tradingview, 'select', sql)
     write_in_log(LOG_FILE, msgs)
     if not result:
@@ -189,19 +191,19 @@ def getPostInfo(startURL, Date = None):
             title=title,
             type=cryptoTypes[0],
             label=label,
-            timestamp=timestamp.strftime("%Y%m%d%H%M%s"))
+            timestamp=timestamp.strftime("%Y%m%d%H%M%S"))
 
         result, msgs, _ = execute_sql(db_info_tradingview, 'select', sql)
         write_in_log(LOG_FILE, msgs)
         if not result:
             sql = 'insert into {schema}.{table}(author, title, crypto_type, label, created_time, idea_content) values ("{user_id}", "{title}", "{type}", "{label}", "{timestamp}", null)'.format(
                 schema = SCHEMA,
-                table = table_name_set['comment'],
+                table = table_name_set['idea'],
                 user_id = author_id,
                 title=title,
                 type=cryptoTypes[0],
                 label=label,
-                timestamp=timestamp.strftime("%Y%m%d%H%M%s"))
+                timestamp=timestamp.strftime("%Y%m%d%H%M%S"))
             result, msgs, successed = execute_sql(db_info_tradingview, 'insert', sql)
             write_in_log(LOG_FILE, msgs)
 
@@ -225,8 +227,8 @@ def getPostInfo(startURL, Date = None):
                 return {'title':title, 'label': label, 'crypto type': cryptoTypes, 'author': author, 'timestamp': timestamp, 'allcomments':allComments}, continueFinding
             else:
                 raise ProgrammingError
-        
-     .close()
+    browser.close()
+    return None, continueFinding
 
 def getCommentInfo(tagString, **kwargs):
     # get author name of comment
@@ -264,7 +266,7 @@ def getCommentInfo(tagString, **kwargs):
     result, msgs, _ = execute_sql(db_info_tradingview, 'select', sql)
     write_in_log(LOG_FILE, msgs)
     if not result:
-        sql = 'insert into {schema}.{table}(user_name, accuracy_so_far) values ("{user_name}", null)'.format(schema = SCHEMA, table = table_name_set['user'], user_name = user)
+        sql = 'insert into {schema}.{table}(user_name, accuracy_so_far) values ("{user_name}", null)'.format(schema = SCHEMA, table = table_name_set['user'], user_name = author)
         result, msgs, _ = execute_sql(db_info_tradingview, 'insert', sql)
         write_in_log(LOG_FILE, msgs)
     else:
