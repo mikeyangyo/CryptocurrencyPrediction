@@ -226,7 +226,7 @@ def getPostInfo(startURL, Date = None):
             else:
                 raise ProgrammingError
         
-     .close()
+    browser.close()
 
 def getCommentInfo(tagString, **kwargs):
     # get author name of comment
