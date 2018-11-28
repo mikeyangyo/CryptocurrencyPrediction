@@ -108,6 +108,7 @@ venv.bak/
 
 # user list file
 user_list.txt
+user_list_backup.txt
 
 # account
 accounts.py
