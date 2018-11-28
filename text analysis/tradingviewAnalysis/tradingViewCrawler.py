@@ -48,13 +48,15 @@ def main():
             result, msgs, _ = execute_sql(db_info=db_info_tradingview, operation_name='select', sql=sql)
             write_in_log(file_location=LOG_FILE, msgs=msgs)
             if not result:
-                sql = 'insert into {schema}.{table}(user_name, accuracy_so_far) values ("{user_name}", null)'.format(schema = SCHEMA, table = table_name_set['user'], user_name = user)
+                sql = 'insert into {schema}.{table}(user_name, accuracy_so_far) values ("{user_name}", 0)'.format(schema = SCHEMA, table = table_name_set['user'], user_name = user)
                 result, msgs, _ = execute_sql(db_info=db_info_tradingview, operation_name='insert', sql=sql)
                 write_in_log(file_location=LOG_FILE, msgs=msgs)
 
             targetURL = 'https://www.tradingview.com/u/{}/'.format(user)
-            print('start crawl {}'.format(targetURL))
+
+            write_in_log(file_location=LOG_FILE, msgs=['start crawling {}\'s posts'.format(targetURL)], )
             getAllPostsInMarket(targetURL, crawl_status = 'alluser')
+            write_in_log(file_location=LOG_FILE, msgs=['finish crawling {}\'s posts'.format(targetURL)], )
     elif args['date'] is None and args['now'] is None:
         # get all post at specific market
         print('get all post at specific market...')

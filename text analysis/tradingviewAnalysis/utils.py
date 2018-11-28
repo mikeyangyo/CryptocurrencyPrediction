@@ -1,6 +1,7 @@
-__all__ = ['CRYPOTOCURRENCIES_ABBREV', 'MONEY_ABBREV', 'getUserListFromFile', 'execute_sql']
+__all__ = ['CRYPOTOCURRENCIES_ABBREV', 'MONEY_ABBREV', 'getUserListFromFile', 'execute_sql', 'get_now_time_string', 'check_double_quotes']
 
 from pymysql import connect
+from datetime import datetime
 
 CRYPOTOCURRENCIES_ABBREV = {
     'Bitcoin' : 'btc',
@@ -59,9 +60,9 @@ def execute_sql(db_info, operation_name, sql):
     finally:
         connection.close()
         if successed:
-            msgs.append("[{}] Success\n".format(operation_name))
+            msgs.append("[{}] {} Success\n".format(get_now_time_string(), operation_name))
         else:
-            msgs.append("[{}] Fail\n".format(operation_name))
+            msgs.append("[{}] {} Fail\n".format(get_now_time_string(), operation_name))
         msgs.append("\tSQL : {}\n".format(sql))
         return result, msgs, successed
 
@@ -69,3 +70,16 @@ def write_in_log(file_location, msgs):
     with open(file_location, "a+") as fp:
         fp.writelines(msgs)
         fp.close()
+
+def check_double_quotes(string):
+    last_position = 0
+    position = string.find('"', last_position)
+    last_position = position
+    while last_position != -1:
+        string = string[:position] + '\\' + string[position:]
+        position = string.find('"', last_position + 2)
+        last_position = position
+    return string
+
+def get_now_time_string(format = '%Y/%m/%d %H%M%S'):
+    return datetime.now().strftime(format)
