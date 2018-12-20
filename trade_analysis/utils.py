@@ -1,33 +1,13 @@
-__all__ = ['CRYPOTOCURRENCIES_ABBREV', 'MONEY_ABBREV', 'getUserListFromFile', 'execute_sql', 'get_now_time_string', 'check_double_quotes']
-
+from funcy.flow import retry
 from pymysql import connect, ProgrammingError
+from pymysql.cursors import DictCursor
 from datetime import datetime
-from funcy import retry
 
-CRYPOTOCURRENCIES_ABBREV = {
-    'Bitcoin' : 'btc',
-    'Litecoin' : 'ltc',
-    'EOS' : 'eos',
-    'Bitcoin Cash' : 'bch',
-    'Tether' : 'usdt',
-    'Ripple' : 'xrp',
-    'Vertcoin' : 'vtc',
-    'Dogecoin' : 'doge',
-    'Ethereum' : 'eth'
-}
-
-MONEY_ABBREV = {
-    'U.S. Dollar' : 'usd'
-}
-
-def getUserListFromFile(filename = "./user_list.txt"):
-    f = open(filename, 'r')
-    rows = f.readlines()
-    return [row.rstrip() for row in rows]
+def get_now_time_string(format = '%Y/%m/%d %H:%M:%S'):
+    return datetime.now().strftime(format)
 
 @retry(tries=5)
 def execute_sql(db_info, operation_name, sql):
-    # print(sql)
     connection = connect(
         host = db_info['host'],
         user = db_info['user_name'],
@@ -37,13 +17,12 @@ def execute_sql(db_info, operation_name, sql):
     sql = sql.encode('utf8')
     result = None
     msgs = []
-    successed = True
-    with connection.cursor() as cursor:
+    with connection.cursor(DictCursor) as cursor:
         operation_name = operation_name.upper()
         if operation_name == "SELECT":
             try:
                 result = cursor.execute(sql)
-                result = cursor.fetchone()
+                result = cursor.fetchall()
             except Exception as e:
                 print("Error: Unable to fetch data", e)
                 raise ProgrammingError
@@ -67,16 +46,3 @@ def write_in_log(file_location, msgs):
     with open(file_location, "a+") as fp:
         fp.writelines(msgs)
         fp.close()
-
-def check_double_quotes(string):
-    last_position = 0
-    position = string.find('"', last_position)
-    last_position = position
-    while last_position != -1:
-        string = string[:position] + '\\' + string[position:]
-        position = string.find('"', last_position + 2)
-        last_position = position
-    return string
-
-def get_now_time_string(format = '%Y/%m/%d %H:%M:%S'):
-    return datetime.now().strftime(format)

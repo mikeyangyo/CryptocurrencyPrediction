@@ -17,16 +17,16 @@ def getAllPostsInMarket(startURL, Date = None, **kwargs):
     allPosts = []
 
     totalPage = getTotalPageNumber(startURL, **kwargs)
-    write_in_log(LOG_FILE, ['[{}] start crawling posts in page 1\n'.format(get_now_time_string())])
+    write_in_log(LOG_FILE, ['[{}] start crawling posts in page 1\n'.format(get_now_time_string())], lock=kwargs['lock'])
     print('processing page 1...')
     if kwargs['crawl_status'] == 'alluser':
         print(curURL)
-        URLs, postInfos, continueFinding = getAllPostsInPage(curURL, Date)
+        URLs, postInfos, continueFinding = getAllPostsInPage(curURL, Date, lock=kwargs['lock'])
     else:
         curURL = requests.compat.urljoin(curURL, '/?sort=recent')
         print(curURL)
         URLs, postInfos, continueFinding = getAllPostsInPage(curURL, Date)
-    write_in_log(LOG_FILE, ['[{}] finsh crawling posts in page 1\n'.format(get_now_time_string())])
+    write_in_log(LOG_FILE, ['[{}] finsh crawling posts in page 1\n'.format(get_now_time_string())], lock=kwargs['lock'])
     if continueFinding == False:
         print('No post can be crawl')
         return None
@@ -37,12 +37,15 @@ def getAllPostsInMarket(startURL, Date = None, **kwargs):
     for i in range(2, totalPage + 1):
         pagePostfix = 'page-' + str(i)
         print('processing ', pagePostfix, '...')
-        write_in_log(LOG_FILE, ['[{}] start crawling posts in {}\n'.format(get_now_time_string(), pagePostfix)])
+        write_in_log(LOG_FILE, ['[{}] start crawling posts in {}\n'.format(get_now_time_string(), pagePostfix)], lock=kwargs['lock'])
         absoluteNextPageURL = requests.compat.urljoin(startURL, pagePostfix)
         curURL = absoluteNextPageURL
         curURL = absoluteNextPageURL + '/?sort=recent'
-        URLs, postInfos, continueFinding = getAllPostsInPage(curURL, Date)
-        write_in_log(LOG_FILE, ['[{}] finish crawling posts in {}\n'.format(get_now_time_string(), pagePostfix)])
+        if 'lock' in kwargs.keys():
+            URLs, postInfos, continueFinding = getAllPostsInPage(curURL, Date, lock=kwargs['lock'])
+        else:
+            URLs, postInfos, continueFinding = getAllPostsInPage(curURL, Date)
+        write_in_log(LOG_FILE, ['[{}] finish crawling posts in {}\n'.format(get_now_time_string(), pagePostfix)], lock=kwargs['lock'])
 
         if URLs in allURLs:
             print('Error: the URL was duplicated')
@@ -58,7 +61,7 @@ def getAllPostsInMarket(startURL, Date = None, **kwargs):
 
     print(allPosts)
 
-def getAllPostsInPage(startURL, Date = None):    
+def getAllPostsInPage(startURL, Date = None, **kwargs):    
     # download content of cryptocurrencies at tradingview.com
     r = requests.get(startURL)
 
@@ -79,9 +82,12 @@ def getAllPostsInPage(startURL, Date = None):
         absoluteURL = requests.compat.urljoin(startURL, url)
         URLs.append(absoluteURL)
         print(absoluteURL)
-        write_in_log(LOG_FILE, ['[{}] start crawling post {}\n'.format(get_now_time_string(), absoluteURL)])
-        postInfo, continueFinding = getPostInfo(absoluteURL, Date)
-        write_in_log(LOG_FILE, ['[{}] finish crawling post {}\n'.format(get_now_time_string(), absoluteURL)])
+        write_in_log(LOG_FILE, ['[{}] start crawling post {}\n'.format(get_now_time_string(), absoluteURL)], lock=kwargs['lock'])
+        if 'lock' in kwargs.keys():
+            postInfo, continueFinding = getPostInfo(absoluteURL, Date, lock=kwargs['lock'])
+        else:
+            postInfo, continueFinding = getPostInfo(absoluteURL, Date)
+        write_in_log(LOG_FILE, ['[{}] finish crawling post {}\n'.format(get_now_time_string(), absoluteURL)], lock=kwargs['lock'])
         print(postInfo)
 
         if postInfo != None:
@@ -104,22 +110,26 @@ def getTotalPageNumber(startURL, **kwargs):
     soup = BeautifulSoup(r.text, 'html.parser')
 
     # find page urls by css class
-    if 'crawl_status' in kwargs.keys() and kwargs['crawl_status'] != 'alluser':
+    PageURLs = []
+    if not PageURLs:
         PageURLs = soup.select('a.tv-feed-pagination__page')
-    else:
+    if not PageURLs:
         PageURLs = soup.select('a.tv-load-more__page')
-    lastPageURL = PageURLs[len(PageURLs) - 1].get('href')
-    startIndex = lastPageURL.find('page-')
+    if PageURLs:
+        lastPageURL = PageURLs[len(PageURLs) - 1].get('href')
+        startIndex = lastPageURL.find('page-')
 
-    # find the page number in url
-    totalPageNumber = lastPageURL[startIndex + 5:]
-    totalPageNumber = list(totalPageNumber)
-    totalPageNumber[len(totalPageNumber) - 1] = ''
-    totalPageNumber = ''.join(totalPageNumber)
+        # find the page number in url
+        totalPageNumber = lastPageURL[startIndex + 5:]
+        totalPageNumber = list(totalPageNumber)
+        totalPageNumber[len(totalPageNumber) - 1] = ''
+        totalPageNumber = ''.join(totalPageNumber)
 
-    return int(totalPageNumber)
+        return int(totalPageNumber)
+    else:
+        return 1
 
-def getPostInfo(startURL, Date = None):
+def getPostInfo(startURL, Date = None, **kwargs):
     continueFinding = True
     # download content of cryptocurrencies at tradingview.com
     r = requests.get(startURL)
@@ -178,20 +188,20 @@ def getPostInfo(startURL, Date = None):
 
     soup = BeautifulSoup(browser.page_source, 'html.parser')
 
-    if cryptoTypes and label:
+    if cryptoTypes and label and label.lower() in ['long', 'short']:
         # check author existence
         sql = 'select id from {schema}.{table} where user_name = "{user_name}"'.format(schema=SCHEMA, table=table_name_set['user'], user_name=author)
-        result, msgs = execute_sql(db_info_tradingview, 'select', sql)
-        write_in_log(LOG_FILE, msgs)
+        result, msgs = execute_sql(db_info_tradingview, 'select', sql, lock=kwargs['lock'])
+        write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
         author_id = None
         if not result:
             sql = 'insert into {schema}.{table}(user_name, accuracy_so_far) values ("{user_name}", 0)'.format(schema = SCHEMA, table = table_name_set['user'], user_name = author)
-            result, msgs = execute_sql(db_info_tradingview, 'insert', sql)
-            write_in_log(LOG_FILE, msgs)
+            result, msgs = execute_sql(db_info_tradingview, 'insert', sql, lock=kwargs['lock'])
+            write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
 
             sql = 'select id from {schema}.{table} order by id desc limit 1'.format(schema=SCHEMA, table=table_name_set['user'])
-            result, msgs = execute_sql(db_info_tradingview, 'select', sql)
-            write_in_log(LOG_FILE, msgs)
+            result, msgs = execute_sql(db_info_tradingview, 'select', sql, lock=kwargs['lock'])
+            write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
         if result:
             author_id = list(result)[0]
 
@@ -206,8 +216,8 @@ def getPostInfo(startURL, Date = None):
                 label=label,
                 timestamp=timestamp.strftime("%Y%m%d%H%M%S"))
 
-            result, msgs = execute_sql(db_info_tradingview, 'select', sql)
-            write_in_log(LOG_FILE, msgs)
+            result, msgs = execute_sql(db_info_tradingview, 'select', sql, lock=kwargs['lock'])
+            write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
             if not result:
                 sql = 'insert into {schema}.{table}(author, title, crypto_type, label, created_time, idea_content) values ("{user_id}", "{title}", "{type}", "{label}", "{timestamp}", null)'.format(
                     schema = SCHEMA,
@@ -217,8 +227,8 @@ def getPostInfo(startURL, Date = None):
                     type=cryptoTypes[0],
                     label=label,
                     timestamp=timestamp.strftime("%Y%m%d%H%M%S"))
-                result, msgs = execute_sql(db_info_tradingview, 'insert', sql)
-                write_in_log(LOG_FILE, msgs)
+                result, msgs = execute_sql(db_info_tradingview, 'insert', sql, lock=kwargs['lock'])
+                write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
 
                 idea_id = None
                 # get id created recently
@@ -226,17 +236,20 @@ def getPostInfo(startURL, Date = None):
                     schema=SCHEMA,
                     table=table_name_set['idea']
                 )
-                result, msgs = execute_sql(db_info_tradingview, 'select', sql)
-                write_in_log(LOG_FILE, msgs)
+                result, msgs = execute_sql(db_info_tradingview, 'select', sql, lock=kwargs['lock'])
+                write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
                 idea_id = list(result)[0]
 
                 #find comment info
                 allCommentList = soup.select('div.tv-chart-comment__wrap')
                 allComments = []
                 for commentList in allCommentList:
-                    write_in_log(LOG_FILE, ['[{}] start crawling comment of post {}\n'.format(get_now_time_string(), startURL)])
-                    comments = getCommentInfo(commentList, idea_id=idea_id)
-                    write_in_log(LOG_FILE, ['[{}] finish crawling comment of post {}\n'.format(get_now_time_string(), startURL)])
+                    write_in_log(LOG_FILE, ['[{}] start crawling comment of post {}\n'.format(get_now_time_string(), startURL)], lock=kwargs['lock'])
+                    if 'lock' in kwargs.keys():
+                        comments = getCommentInfo(commentList, idea_id=idea_id, lock=kwargs['lock'])
+                    else:
+                        comments = getCommentInfo(commentList, idea_id=idea_id)
+                    write_in_log(LOG_FILE, ['[{}] finish crawling comment of post {}\n'.format(get_now_time_string(), startURL)], lock=kwargs['lock'])
                     allComments.append(comments)
                 return {'title':title, 'label': label, 'crypto type': cryptoTypes, 'author': author, 'timestamp': timestamp, 'allcomments':allComments}, continueFinding
 
@@ -256,6 +269,8 @@ def getCommentInfo(tagString, **kwargs):
     commentText = tagString.select('div.tv-chart-comment__text')[0].getText().strip()
     
     if commentText != '':
+        print(commentText)
+        print('=========')
         html = lxml.html.fromstring(commentText)
         content = lxml.html.tostring(html)
     
@@ -264,9 +279,15 @@ def getCommentInfo(tagString, **kwargs):
         content = check_double_quotes(content)
         # check if this comment is a reply or not
         if content[0] == '@':
-            toWhomEndIndex = content.find(',')
-            if toWhomEndIndex == -1:
-                toWhomEndIndex = content.find(' ')
+            toWhomEndIndex_comma = content.find(',')
+            toWhomEndIndex_space = content.find(' ')
+            if toWhomEndIndex_comma > 0 and toWhomEndIndex_space > 0:
+                toWhomEndIndex = min(toWhomEndIndex_comma, toWhomEndIndex_space)
+            elif toWhomEndIndex_comma < 0 and toWhomEndIndex_space < 0:
+                toWhomEndIndex = 0
+            else:
+                toWhomEndIndex = toWhomEndIndex_comma if toWhomEndIndex_comma > 0 else toWhomEndIndex_space
+
             toWhom = str(content[1:toWhomEndIndex])
             content = str(content[toWhomEndIndex + 1:])
     
@@ -278,17 +299,17 @@ def getCommentInfo(tagString, **kwargs):
 
     # check author existence
     sql = 'select id from {schema}.{table} where user_name = "{user_name}"'.format(schema=SCHEMA, table=table_name_set['user'], user_name=author)
-    result, msgs = execute_sql(db_info_tradingview, 'select', sql)
+    result, msgs = execute_sql(db_info_tradingview, 'select', sql, lock=kwargs['lock'])
     write_in_log(LOG_FILE, msgs)
     author_id = None
     if not result:
         sql = 'insert into {schema}.{table}(user_name, accuracy_so_far) values ("{user_name}", 0)'.format(schema = SCHEMA, table = table_name_set['user'], user_name = author)
-        result, msgs = execute_sql(db_info_tradingview, 'insert', sql)
-        write_in_log(LOG_FILE, msgs)
+        result, msgs = execute_sql(db_info_tradingview, 'insert', sql, lock=kwargs['lock'])
+        write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
 
         sql = 'select id from {schema}.{table} order by id desc limit 1'.format(schema=SCHEMA, table=table_name_set['user'])
-        result, msgs = execute_sql(db_info_tradingview, 'select', sql)
-        write_in_log(LOG_FILE, msgs)
+        result, msgs = execute_sql(db_info_tradingview, 'select', sql, lock=kwargs['lock'])
+        write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
     if result:
         author_id = list(result)[0]
 
@@ -296,16 +317,16 @@ def getCommentInfo(tagString, **kwargs):
     to_whom_id = None
     if toWhom:
         sql = 'select id from {schema}.{table} where user_name = "{user_name}"'.format(schema=SCHEMA, table=table_name_set['user'], user_name=toWhom)
-        result, msgs = execute_sql(db_info_tradingview, 'select', sql)
-        write_in_log(LOG_FILE, msgs)
+        result, msgs = execute_sql(db_info_tradingview, 'select', sql, lock=kwargs['lock'])
+        write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
         if not result:
             sql = 'insert into {schema}.{table}(user_name, accuracy_so_far) values ("{user_name}", 0)'.format(schema = SCHEMA, table = table_name_set['user'], user_name = toWhom)
-            result, msgs = execute_sql(db_info_tradingview, 'insert', sql)
-            write_in_log(LOG_FILE, msgs)
+            result, msgs = execute_sql(db_info_tradingview, 'insert', sql, lock=kwargs['lock'])
+            write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
 
             sql = 'select id from {schema}.{table} order by id desc limit 1'.format(schema=SCHEMA, table=table_name_set['user'])
-            result, msgs = execute_sql(db_info_tradingview, 'select', sql)
-            write_in_log(LOG_FILE, msgs)
+            result, msgs = execute_sql(db_info_tradingview, 'select', sql, lock=kwargs['lock'])
+            write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
         if result:
             to_whom_id = list(result)[0]
 
@@ -322,8 +343,8 @@ def getCommentInfo(tagString, **kwargs):
     if author_id:
         sql += ' and author = "{}"'.format(author_id)
 
-    result, msgs = execute_sql(db_info_tradingview, 'select', sql)
-    write_in_log(LOG_FILE, msgs)
+    result, msgs = execute_sql(db_info_tradingview, 'select', sql, lock=kwargs['lock'])
+    write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
     if not result:
         sql = 'insert into {schema}.{table}(author, idea, comment_content, created_time, number_of_agree, to_whom) values ("{author_id}", "{idea_id}", "{content}", "{created_time}", {number_of_agree}'.format(
             schema = SCHEMA,
@@ -337,7 +358,7 @@ def getCommentInfo(tagString, **kwargs):
             sql += ', "{}")'.format(to_whom_id)
         else:
             sql += ', null)'
-        result, msgs = execute_sql(db_info_tradingview, 'insert', sql)
-        write_in_log(LOG_FILE, msgs)
+        result, msgs = execute_sql(db_info_tradingview, 'insert', sql, lock=kwargs['lock'])
+        write_in_log(LOG_FILE, msgs, lock=kwargs['lock'])
 
     return {'author': author, 'timestamp': timestamp, 'content': content, '# of agree': agreeNum, 'toWhom': toWhom}
